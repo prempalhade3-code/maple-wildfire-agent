@@ -29,5 +29,6 @@ COPY . ./
 # Expose port (FastAPI runs on 8000)
 EXPOSE 8000
 
-# Default command – will be overridden by docker-compose if needed
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Render provides the public web port through $PORT; keep 8000 as the local
+# Docker default so docker-compose continues to work unchanged.
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
