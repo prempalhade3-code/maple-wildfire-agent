@@ -1,0 +1,248 @@
+========== PROJECT STRUCTURE ==========
+./backend/__init__.py
+./backend/actuation.py
+./backend/auth.py
+./backend/database.py
+./backend/Dockerfile
+./backend/main.py
+./backend/mireye_client.py
+./backend/models.py
+./backend/pyproject.toml
+./backend/risk_engine.py
+./backend/schemas.py
+./backend/weather_client.py
+./context_dump.txt
+./docker-compose.yml
+./Dockerfile
+./dump_context.sh
+./frontend/next-env.d.ts
+./frontend/package-lock.json
+./frontend/package.json
+./frontend/pages/_app.tsx
+./frontend/pages/_document.tsx
+./frontend/pages/index.tsx
+./frontend/pages/platform.tsx
+./frontend/pages/product.tsx
+./frontend/pages/why-maple.tsx
+./frontend/postcss.config.js
+./frontend/styles/globals.css
+./frontend/tailwind.config.js
+./frontend/tsconfig.json
+./README.md
+-e 
+========== README ==========
+# GridSentry: Wildfire Grid Safety & SCADA Safety Agent
+
+GridSentry is an agentic SCADA safety platform designed to prevent power line-ignited forest fires. By integrating real-time weather analytics from Open-Meteo with physical earth telemetry from Mireye, it identifies wildfire risks at a granular, pole-by-pole level, enabling surgical line trip isolation instead of county-wide power shutoffs.
+
+---
+
+## 📋 The One-Pager Pitch
+
+### 1. What problem are we solving?
+High-voltage transmission lines clashing with tree branches during wind storms are the leading cause of catastrophic wildfires (e.g., California's Camp Fire). Today, utility operators execute massive "Public Safety Power Shutoffs" (PSPS) across entire counties, leaving thousands of customers, businesses, and hospitals in the dark.
+
+**GridSentry solves this by tracking wildfire ignition risk at a granular, span-by-span level, allowing utilities to de-energize *only* the specific 100-foot cable span in immediate danger while keeping the rest of the grid powered.**
+
+### 2. What "weird" combination of datasets are we using?
+We combine **Mireye's physical earth data** (soil moisture, vegetation canopy, terrain slope, building exposure counts) with **live weather telemetry** (Open-Meteo API) and **spot carbon-intensity index data** (CO2-aware workload routing). Linking real-time weather feeds and global server farm workloads to physical hydrology and electrical grid topology is a unique and powerful combination that offers true predictive fire safety.
+
+### 3. Who is the buyer?
+The buyers are **multi-billion-dollar electric utility conglomerates** (like PG&E, Southern California Edison, PacifiCorp), their **reinsurance groups**, and **Big Tech hyperscalers** (like Microsoft, Google, AWS) who want to route their server farm compute loads away from grid zones at immediate risk of sparking wildfires.
+
+---
+
+## 🛠️ System Architecture
+
+GridSentry is built as a modular, containerized web application with a true **Autonomous Agent Loop**:
+
+1. **Autonomous Safety Agent**: A background worker process inside the FastAPI app that scans all transmission lines every 45 seconds, analyzes physical and weather metrics, reasons about wildfire threat levels, and **decides to automatically execute de-energization relay trips** if the risk score crosses 70%, securing the grid segment before a spark occurs.
+2. **Carbon & Load Routing Loop**: The agent automatically triggers a workload transfer directive when a line is tripped, routing 100% of local server workloads to clean hydro-facilities in the Pacific Northwest to reduce grid stress.
+3. **Frontend**: Next.js (React + TypeScript) + Tailwind CSS dashboard. Features an interactive SVG regional grid map, circular risk dials, SHAP feature attribution bar charts, a CO2-aware workload routing widget, and a real-time SCADA operations log ticker.
+4. **Backend API**: FastAPI (Python) web server providing REST endpoints for manually checking risks, executing user-triggered trips, and tracking logs.
+5. **Database**: PostgreSQL with PostGIS extension (`postgis/postgis:15-3.4-alpine`) storing LineString transmission grid paths, risk logs, and actuation records.
+
+---
+
+## 🚀 Setup & Execution
+
+### Prerequisite: Ensure Docker Desktop is Running
+Make sure Docker Desktop is launched and the docker socket is responsive.
+
+### 1. Start the Docker Compose Stack
+From the project root directory, spin up the PostGIS database and FastAPI backend:
+```bash
+docker compose up -d --build
+```
+This starts the `grid_sentry_db` and `grid_sentry_api` containers.
+
+### 2. Initialise Database Tables
+Run the database migrations inside the running API container to create the tables:
+```bash
+docker compose exec -T api python - <<'PY'
+import asyncio
+import database, models
+async def init():
+    async with database.engine.begin() as conn:
+        await conn.run_sync(models.Base.metadata.create_all)
+asyncio.run(init())
+PY
+```
+
+### 3. Seed Transmission Line Data
+Populate the database with the four primary California transmission line loops:
+```bash
+curl -X POST http://localhost:8000/seed
+```
+Expected response: `{"status":"seeded","count":4}`
+
+### 4. Launch the Frontend Dev Server
+Navigate to the frontend folder, install packages, and start Next.js:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+The client dashboard will start up at **http://localhost:3000**.
+
+---
+
+## ⚡ Interactive Dashboard & SCADA Simulation
+
+1. **Dashboard Overview**: Open **http://localhost:3000** in your browser.
+2. **Geospatial Scans**: Click on the **Big Sur Forest Span** node on the interactive SVG map. Notice the live Open-Meteo wind forecasts and Mireye soil moisture metrics loading. The warning badge flashes crimson to indicate a critical risk.
+3. **Emergency Isolation**: Click the **TRIGGER EMERGENCY SHUTDOWN** button:
+   - A modal progress window will initiate to display real-time SCADA breaker trip handshakes.
+   - HTML5 web audio alerts will emit warning sound tones directly in the browser.
+   - Once the handshake is complete, the map active node and transmission lines turn green (safe/de-energized), the threat dials drop to 0%, and de-energization confirmation logs are appended to the scrolling safety ticker.
+-e 
+========== PACKAGE.JSON (Node/JS) ==========
+-e 
+========== REQUIREMENTS.TXT (Python) ==========
+-e 
+========== PYPROJECT.TOML ==========
+-e 
+========== ENV EXAMPLE (no secrets) ==========
+-e 
+========== ENV VARIABLE NAMES ONLY (from .env, no values) ==========
+-e 
+========== TECH STACK / CONFIG FILES ==========
+--- docker-compose.yml ---
+services:
+  db:
+    image: postgis/postgis:15-3.4-alpine
+    platform: linux/amd64
+    container_name: grid_sentry_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: gridpwd
+      POSTGRES_DB: grid_sentry
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./backend
+    container_name: grid_sentry_api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:gridpwd@db:5432/grid_sentry
+    ports:
+      - "8000:8000"
+    command: "uvicorn main:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  db_data:
+
+--- Dockerfile ---
+# ---------------------------------------------------------
+# Base image – slim Python 3.11 (same as the original build)
+# ---------------------------------------------------------
+FROM python:3.11-slim
+
+# Install the system packages needed for GDAL / PostGIS
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    gdal-bin \
+    libgdal-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non‑root user (safer)
+ARG UID=1000
+ARG GID=1000
+RUN groupadd -g $GID appgroup && \
+    useradd -m -u $UID -g $GID -s /bin/bash appuser
+USER appuser
+
+# Working directory inside the container
+WORKDIR /app
+
+# Copy only the Poetry files first – this caches the dependency install layer
+COPY pyproject.toml poetry.lock* ./
+
+# Install Poetry (the same version you used before)
+RUN curl -sSL https://install.python-poetry.org | python3 - --version 1.7.1 && \
+    ln -s /root/.local/bin/poetry /usr/local/bin/poetry
+
+# Install Python dependencies without creating a virtualenv
+RUN poetry config virtualenvs.create false && \
+    poetry install --no-interaction --no-ansi
+
+# Now copy the rest of the source code
+COPY . .
+
+# Expose the FastAPI port (default 8000)
+EXPOSE 8000
+
+# Default command – run the API with Uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+-e 
+========== GIT LOG (last 30 commits) ==========
+-e 
+========== GIT STATUS ==========
+-e 
+========== BACKEND ENTRYPOINT FILES ==========
+-e 
+========== API ROUTES / ENDPOINTS DIRECTORY ==========
+-e 
+========== MODELS / SCHEMA FILES ==========
+./backend/models.py
+-e 
+========== FRONTEND/UI DIRECTORY STRUCTURE ==========
+./frontend/tailwind.config.js
+./frontend/.next/trace
+./frontend/.next/react-loadable-manifest.json
+./frontend/.next/build-manifest.json
+./frontend/.next/server/pages-manifest.json
+./frontend/.next/server/next-font-manifest.js
+./frontend/.next/server/_error.js
+./frontend/.next/server/middleware-manifest.json
+./frontend/.next/server/middleware-react-loadable-manifest.js
+./frontend/.next/server/webpack-runtime.js
+./frontend/.next/server/middleware-build-manifest.js
+./frontend/.next/server/next-font-manifest.json
+./frontend/.next/package.json
+./frontend/next-env.d.ts
+./frontend/styles/globals.css
+./frontend/package-lock.json
+./frontend/package.json
+./frontend/tsconfig.json
+./frontend/postcss.config.js
+./frontend/pages/index.tsx
+./frontend/pages/product.tsx
+./frontend/pages/why-maple.tsx
+./frontend/pages/platform.tsx
+./frontend/pages/_document.tsx
+./frontend/pages/_app.tsx
+-e 
+========== DONE ==========

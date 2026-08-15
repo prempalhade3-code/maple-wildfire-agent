@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "maple-backend"
+version = "0.1.0"
+description = "FastAPI backend for Maple"
+authors = ["Prem Pal Hade <prem@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "0.110.2"
+uvicorn = {extras = ["standard"], version = "0.30.1"}
+sqlalchemy = "2.0.28"
+asyncpg = "0.29.0"
+psycopg2-binary = "2.9.9"
+geoalchemy2 = "0.14.3"
+python-dotenv = "1.0.1"
+pydantic = "2.6.3"
+httpx = "0.27.0"
+lightgbm = "4.5.0"
+shapely = "2.0.3"
+geopandas = "0.14.2"
+
+[tool.poetry.dev-dependencies]
+pytest = "^8.2.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

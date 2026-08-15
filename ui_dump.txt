@@ -1,0 +1,1267 @@
+========== FRONTEND PACKAGE.JSON ==========
+{
+  "name": "grid-sentry-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@clerk/clerk-react": "^4.32.5",
+    "@types/node": "^20.10.5",
+    "@types/react": "^18.2.38",
+    "autoprefixer": "^10.4.16",
+    "framer-motion": "^11.18.2",
+    "lucide-react": "^1.28.0",
+    "next": "^13.5.6",
+    "postcss": "^8.4.31",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-map-gl": "^7.1.7",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.3",
+    "typewriter-effect": "^2.22.0"
+  }
+}
+-e 
+========== TAILWIND CONFIG ==========
+// tailwind.config.js
+module.exports = {
+  content: [
+    "./pages/**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}"
+  ],
+  theme: {
+    extend: {
+      fontFamily: {
+        serif: ['"Playfair Display"', 'Georgia', 'serif'],
+        sans: ['Outfit', 'Inter', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace']
+      },
+      colors: {
+        "primary": "hsl(210, 100%, 55%)",
+        "danger": "hsl(0, 80%, 55%)",
+        "warn": "hsl(40, 90%, 50%)",
+        "bg-dark": "hsl(220, 20%, 4%)",
+        "bg-light": "hsl(215, 10%, 20%)"
+      },
+      boxShadow: {
+        glass: "0 8px 32px 0 rgba(0, 0, 0, 0.4)",
+        glow: "0 0 20px rgba(16, 185, 129, 0.15)",
+        roseGlow: "0 0 20px rgba(244, 63, 94, 0.25)",
+        indigoGlow: "0 0 25px rgba(99, 102, 241, 0.2)"
+      }
+    }
+  },
+  plugins: []
+};
+-e 
+========== GLOBALS.CSS ==========
+/* globals.css - Litmus-Inspired Clean Theme */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background-color: #fbfbfd;
+  color: #09090b;
+  font-family: 'Plus Jakarta Sans', 'Outfit', 'Inter', sans-serif;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+/* Litmus Organic Mesh Gradient Hero Background */
+.bg-litmus-mesh {
+  background-color: #113622;
+  background-image: 
+    radial-gradient(at 10% 20%, rgba(34, 197, 94, 0.8) 0px, transparent 50%),
+    radial-gradient(at 80% 10%, rgba(234, 179, 8, 0.7) 0px, transparent 50%),
+    radial-gradient(at 50% 80%, rgba(20, 184, 166, 0.8) 0px, transparent 50%),
+    radial-gradient(at 90% 90%, rgba(13, 148, 136, 0.6) 0px, transparent 50%),
+    radial-gradient(at 20% 80%, rgba(16, 185, 129, 0.7) 0px, transparent 50%);
+}
+
+/* Subtle Soft Glass Cards */
+.glass-card-light {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(228, 228, 231, 0.8);
+}
+
+.glass-card-dark {
+  background: rgba(18, 18, 20, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Custom Minimal Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
+}
+-e 
+========== _app.tsx ==========
+// pages/_app.tsx
+import '../styles/globals.css';
+import { ClerkProvider } from '@clerk/clerk-react';
+
+const CLERK_PUBLISHABLE_KEY = typeof window !== 'undefined' 
+  ? (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || '') 
+  : '';
+
+function MyApp({ Component, pageProps }: any) {
+  if (!CLERK_PUBLISHABLE_KEY) {
+    return <Component {...pageProps} />;
+  }
+
+  return (
+    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY}>
+      <Component {...pageProps} />
+    </ClerkProvider>
+  );
+}
+
+export default MyApp;
+-e 
+========== index.tsx ==========
+import React, { useState, useEffect, useRef } from 'react';
+import Head from 'next/head';
+import Link from 'next/link';
+import { motion } from 'framer-motion';
+import Typewriter from 'typewriter-effect';
+
+interface Line {
+  id: number;
+  name: string;
+  voltage_kv: number | null;
+}
+
+interface RiskScore {
+  line_id: number;
+  score: number;
+  probability: number;
+  consequence: number;
+  timestamp: string;
+  wind_speed?: number;
+  wind_direction?: number;
+  humidity?: number;
+  temperature?: number;
+  soil_moisture?: number;
+  canopy_density?: number;
+  slope?: number;
+  distance?: number;
+  building_count?: number;
+  contributions?: Record<string, number>;
+  citations?: string[];
+}
+
+export default function Home() {
+  const [viewMode, setViewMode] = useState<'landing' | 'dashboard'>('landing');
+  const [lines, setLines] = useState<Line[]>([]);
+  const [selectedLineId, setSelectedLineId] = useState<number>(1);
+  const [selectedLineData, setSelectedLineData] = useState<RiskScore | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [deEnergizedLines, setDeEnergizedLines] = useState<Record<number, boolean>>({});
+  const [logs, setLogs] = useState<{ id: number; time: string; text: string; category: 'alert' | 'telemetry' | 'scada' }[]>([]);
+  const [logFilter, setLogFilter] = useState<'all' | 'alert' | 'telemetry' | 'scada'>('all');
+  
+  const [tripProgress, setTripProgress] = useState<number>(0);
+  const [tripStatusText, setTripStatusText] = useState<string>('');
+  const [showTripModal, setShowTripModal] = useState<boolean>(false);
+  const [isProcessingTrip, setIsProcessingTrip] = useState<boolean>(false);
+
+  const logsEndRef = useRef<HTMLDivElement>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const BACKEND_URL = 'http://localhost:8000';
+
+  const addLog = (text: string, category: 'alert' | 'telemetry' | 'scada' = 'scada') => {
+    const time = new Date().toLocaleTimeString();
+    setLogs((prev) => [...prev, { id: Date.now() + Math.random(), time, text, category }]);
+  };
+
+  const playBeep = (freq: number, duration: number, delay = 0) => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      setTimeout(() => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        gain.gain.setValueAtTime(0.06, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + duration);
+      }, delay);
+    } catch (e) {
+      console.log('Audio feedback uninitialized:', e);
+    }
+  };
+
+  useEffect(() => {
+    async function initApp() {
+      try {
+        setLoading(true);
+        await fetch(`${BACKEND_URL}/seed`, { method: 'POST' });
+        addLog('Database initialized and PostGIS geometries seeded.', 'scada');
+
+        const res = await fetch(`${BACKEND_URL}/lines`);
+        const data = await res.json();
+        setLines(data);
+        addLog(`Synced ${data.length} transmission line loops from PostGIS.`, 'scada');
+      } catch (err) {
+        console.error(err);
+        addLog('API network failure. Please verify backend service on port 8000.', 'alert');
+      } finally {
+        setLoading(false);
+      }
+    }
+    initApp();
+  }, []);
+
+  useEffect(() => {
+    async function fetchRisk() {
+      try {
+        const res = await fetch(`${BACKEND_URL}/risk/${selectedLineId}`);
+        const data = await res.json();
+        setSelectedLineData(data);
+        addLog(`Risk metrics updated for line ${data.line_id} (${data.score}% danger)`, 'telemetry');
+
+        if (data.score > 60 && !deEnergizedLines[selectedLineId]) {
+          playBeep(440, 0.25);
+          playBeep(440, 0.35, 150);
+        } else {
+          playBeep(600, 0.08);
+        }
+      } catch (err) {
+        console.error(err);
+        addLog(`Failed to fetch risk score for line ${selectedLineId}`, 'alert');
+      }
+    }
+
+    if (lines.length > 0) {
+      fetchRisk();
+    }
+  }, [selectedLineId, lines]);
+
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
+  const triggerShutdown = async () => {
+    if (!selectedLineData || deEnergizedLines[selectedLineId] || isProcessingTrip) return;
+
+    setIsProcessingTrip(true);
+    setShowTripModal(true);
+    setTripProgress(0);
+    setTripStatusText('Initiating SCADA breaker handshake...');
+
+    playBeep(880, 0.15);
+    playBeep(880, 0.25, 120);
+
+    addLog(`OPERATOR OVERRIDE: Initiating trip sequence for line ${selectedLineId}...`, 'alert');
+
+    const steps = [
+      { progress: 25, text: 'Transmitting Trip Protocol over DNP3/SCADA...', log: 'Trip directive dispatched to Substation Relay 41...' },
+      { progress: 55, text: 'Breakers opened. Verifying line voltage...', log: 'Breaker status confirmed: OPEN. Zero current detected.' },
+      { progress: 85, text: 'Busbars confirmed zero potential (0.0kV)...', log: 'Telemetry check: Potential 0.0kV across all phases.' },
+      { progress: 100, text: 'Grid segment isolated. Wildfire hazard secured.', log: 'SCADA isolation complete. Wire-to-branch spark hazard eliminated.' }
+    ];
+
+    for (const step of steps) {
+      await new Promise((resolve) => setTimeout(resolve, 550));
+      setTripProgress(step.progress);
+      setTripStatusText(step.text);
+      addLog(step.log, step.progress === 100 ? 'scada' : 'alert');
+
+      if (step.progress < 100) {
+        playBeep(600, 0.08);
+      } else {
+        playBeep(523.25, 0.2);
+        playBeep(659.25, 0.2, 100);
+        playBeep(783.99, 0.35, 200);
+      }
+    }
+
+    try {
+      await fetch(`${BACKEND_URL}/actuate/${selectedLineId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      setDeEnergizedLines((prev) => ({ ...prev, [selectedLineId]: true }));
+      addLog(`GRID SECURED: Segment ID ${selectedLineId} isolated. Workloads rerouted.`, 'scada');
+    } catch (e) {
+      console.error(e);
+      addLog('Failed to persist actuation record to database API.', 'alert');
+    } finally {
+      setIsProcessingTrip(false);
+      setTimeout(() => setShowTripModal(false), 500);
+    }
+  };
+
+  const currentScore = selectedLineData 
+    ? (deEnergizedLines[selectedLineId] ? 0 : selectedLineData.score) 
+    : 0;
+
+  const currentProbability = selectedLineData 
+    ? (deEnergizedLines[selectedLineId] ? 0 : selectedLineData.probability * 100) 
+    : 0;
+
+  const currentConsequence = selectedLineData 
+    ? (deEnergizedLines[selectedLineId] ? 0 : selectedLineData.consequence * 100) 
+    : 0;
+
+  const filteredLogs = logs.filter((l) => logFilter === 'all' || l.category === logFilter);
+
+  return (
+    <div className="bg-[#fbfbfd] text-zinc-950 min-h-screen font-sans antialiased selection:bg-zinc-900 selection:text-white">
+      <Head>
+        <title>GridSentry | AI Wildfire Safety & SCADA Grid Isolation Agent</title>
+        <meta name="description" content="Surgical power grid shutoffs predicting wildfire ignition risk using Mireye physical earth layers and live Open-Meteo weather telemetry." />
+      </Head>
+
+      {/* Litmus-Style Header Navigation Bar */}
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-zinc-200/80 h-16 transition-all duration-300">
+        <div className="max-w-7xl mx-auto h-full px-6 flex items-center justify-between">
+          
+          {/* Logo & Identity */}
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setViewMode('landing')}>
+            <div className="h-8 w-8 rounded-lg bg-zinc-950 flex items-center justify-center font-bold text-xs text-white shadow-sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M4 14h6v6l10-12h-6V2z"/></svg>
+            </div>
+            <div className="flex flex-col">
+              <span className="font-extrabold text-lg tracking-tight text-zinc-950 flex items-center gap-2">
+                Maple
+              </span>
+            </div>
+          </div>
+
+          {/* Center Navigation */}
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-zinc-600">
+            <Link href="/product"><span className="cursor-pointer hover:text-zinc-950 transition-colors">Product</span></Link>
+            <Link href="/why-maple"><span className="cursor-pointer hover:text-zinc-950 transition-colors">Why Maple</span></Link>
+            <Link href="/platform"><span className="cursor-pointer hover:text-zinc-950 transition-colors">Platform</span></Link>
+          </nav>
+
+          {/* Right Action Controls */}
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setViewMode('dashboard')}
+              className="px-5 py-2 rounded-full text-sm font-semibold bg-zinc-950 text-white hover:bg-zinc-800 transition-all shadow-sm active:scale-95 hidden sm:inline-flex items-center gap-1.5"
+            >
+              <span>Login</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ========================================================================= */}
+      {/* LANDING PAGE VIEW (Litmus Style)                                         */}
+      {/* ========================================================================= */}
+      {viewMode === 'landing' && (
+        <main className="w-full pt-6 pb-20">
+          
+          {/* MAPLE HERO BANNER CONTAINER */}
+          <section className="px-4 sm:px-6 max-w-7xl mx-auto mb-20">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8 }}
+              className="bg-litmus-mesh rounded-[2.5rem] p-8 sm:p-16 md:p-20 text-center text-white relative shadow-2xl overflow-hidden flex flex-col items-center"
+            >
+              
+              {/* Top YC / Mireye Translucent Pill Badge */}
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.2 }}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/25 mb-8 text-xs font-medium text-white shadow-sm"
+              >
+                <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                <span className="font-semibold">Backed by Y Combinator</span>
+              </motion.div>
+
+              {/* Typewriter Headline */}
+              <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight max-w-4xl leading-[1.1] mb-6 text-white min-h-[140px] sm:min-h-[180px]">
+                Looking for an AI agent that can <br className="hidden sm:inline" />
+                <span className="font-serif italic font-normal text-amber-200">
+                  <Typewriter
+                    options={{
+                      strings: [
+                        'isolate grid faults?',
+                        'predict power surges?',
+                        'analyze wildfire risk?',
+                        'reroute clean energy?',
+                        'secure SCADA networks?'
+                      ],
+                      autoStart: true,
+                      loop: true,
+                      deleteSpeed: 40,
+                      delay: 70
+                    }}
+                  />
+                </span>
+              </h1>
+
+              {/* Subtitle */}
+              <p className="text-base sm:text-xl text-emerald-50/90 max-w-2xl font-normal leading-relaxed mb-10">
+                Let them show you. Maple turns Mireye physical earth metrics and live telemetry into surgical, 100-foot span SCADA line de-energization directives.
+              </p>
+
+              {/* Litmus Pill CTA Buttons */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 mb-16">
+                <button 
+                  onClick={() => setViewMode('dashboard')}
+                  className="w-full sm:w-auto px-7 py-3.5 rounded-full font-bold text-sm bg-white text-zinc-950 hover:bg-zinc-100 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2 group"
+                >
+                  <span>Launch Operations Console</span>
+                  <span className="text-xs group-hover:translate-x-1 transition-transform">→</span>
+                </button>
+              </div>
+
+              {/* FLOATING ASSESSMENT CARD (Litmus Style) */}
+              <motion.div 
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4, duration: 0.8 }}
+                className="w-full max-w-lg rounded-2xl bg-white text-zinc-950 p-6 shadow-2xl text-left backdrop-blur-xl border border-zinc-200"
+              >
+                <div className="flex items-center justify-between mb-4 border-b border-zinc-100 pb-4">
+                  <span className="font-bold text-sm">Build an assessment from this telemetry</span>
+                  <span className="h-5 w-5 bg-zinc-100 rounded flex items-center justify-center text-[10px]">⚡</span>
+                </div>
+                
+                <div className="space-y-3 mb-4">
+                  <div className="flex items-center gap-3 text-xs text-zinc-500">
+                    <span className="text-emerald-500 font-bold">✓</span> <span className="font-mono font-medium">Context:</span> telemetry context added
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-zinc-500">
+                    <span className="text-emerald-500 font-bold">✓</span> <span className="font-mono font-medium">Link:</span> repo connected
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-zinc-500">
+                    <span className="text-emerald-500 font-bold">✓</span> <span className="font-mono font-medium">Generate:</span> assessment generated
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-zinc-500">
+                    <span className="text-emerald-500 font-bold">✓</span> <span className="font-mono font-medium">Benchmark:</span> agent baseline run
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-zinc-500">
+                    <span className="text-zinc-300 font-bold">○</span> <span className="font-mono font-medium text-zinc-900">Done:</span> ready to review
+                  </div>
+                </div>
+
+                <div className="bg-emerald-50 rounded-lg p-3 text-xs font-semibold text-emerald-700 flex items-center justify-between border border-emerald-100">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    SUCCESS
+                  </div>
+                  <span className="text-emerald-600/70">120 ms</span>
+                </div>
+              </motion.div>
+
+            </motion.div>
+          </section>
+
+          {/* SCROLL TRIGGERED CARDS (Litmus Style) */}
+          <section className="py-20 px-6 max-w-6xl mx-auto">
+            <div className="text-center mb-16">
+              <span className="text-xs font-mono text-zinc-500 tracking-widest uppercase mb-2 block font-semibold">Why Teams Switch</span>
+              <h2 className="text-3xl sm:text-5xl font-extrabold text-zinc-950 tracking-tight">
+                Analyze how you've always wanted to.
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[
+                { title: 'ENGINEER TIME', stat: '0', desc: 'engineering hours to run your top of funnel' },
+                { title: 'YOUR WORKFLOWS', subtitle: 'Plug-in', desc: 'to the process you already run' },
+                { title: 'SIGNAL', subtitle: 'Work-trial', desc: 'depth from every submission' }
+              ].map((card, idx) => (
+                <motion.div 
+                  key={idx}
+                  initial={{ opacity: 0, y: 40 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-100px" }}
+                  transition={{ duration: 0.6, delay: idx * 0.1 }}
+                  className="bg-white border border-zinc-200 rounded-3xl p-8 shadow-sm hover:shadow-md transition-all flex flex-col items-start min-h-[300px]"
+                >
+                  <span className="text-[10px] text-zinc-400 font-mono tracking-widest uppercase mb-auto">{card.title}</span>
+                  {card.stat && <h3 className="text-6xl font-normal text-emerald-600 tracking-tighter mb-4">{card.stat}</h3>}
+                  {card.subtitle && <h3 className="text-4xl font-normal text-emerald-600 tracking-tight mb-4">{card.subtitle}</h3>}
+                  <p className="text-sm text-zinc-600 font-medium">{card.desc}</p>
+                </motion.div>
+              ))}
+            </div>
+          </section>
+
+          {/* TERMINAL / CLI SECTION */}
+          <section className="py-20 px-6 max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <span className="text-xs font-mono text-zinc-500 tracking-widest uppercase mb-2 block font-semibold">The Operator Experience</span>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-zinc-950">
+                Prepare for the grid, <br/>
+                <span className="font-serif italic font-normal text-zinc-500">not just the interview.</span>
+              </h2>
+            </div>
+            
+            <motion.div 
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="bg-[#121215] rounded-xl overflow-hidden max-w-3xl mx-auto shadow-2xl border border-zinc-800"
+            >
+              <div className="bg-[#1e1e24] px-4 py-3 flex items-center gap-2 border-b border-zinc-800">
+                <div className="flex gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-rose-500" />
+                  <div className="w-3 h-3 rounded-full bg-amber-500" />
+                  <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                </div>
+                <div className="mx-auto text-[10px] text-zinc-400 font-mono">maple@grid-node ~ zsh</div>
+              </div>
+              <div className="p-6 font-mono text-xs sm:text-sm text-zinc-300 leading-relaxed min-h-[250px] whitespace-pre-wrap">
+                <Typewriter
+                  options={{
+                    strings: [
+                      "$ npm install -g maple-cli\n> maple-cli@1.0.9 installed\n\n$ maple init SCADA.\n> Connected. Created telemetry node.\n> Assessment ready.\n\n$ maple check --node 04\n> Running risk evaluation on Node 04..."
+                    ],
+                    autoStart: true,
+                    loop: true,
+                    delay: 40,
+                    pauseFor: 4000
+                  }}
+                />
+              </div>
+            </motion.div>
+          </section>
+
+          {/* FAQ SECTION */}
+          <section className="py-32 px-6 max-w-3xl mx-auto">
+            <h2 className="text-4xl font-normal text-zinc-950 mb-12">FAQs</h2>
+            <div className="space-y-4">
+              {[
+                { q: 'Is Maple right for my team?', a: 'Yes, if you operate large-scale physical infrastructure.' },
+                { q: 'Can candidates use AI?', a: 'Maple is built to integrate with AI-native workflows.' },
+                { q: 'How does grading work?', a: 'We evaluate telemetry using a deterministic LLM harness.' },
+                { q: 'Does Maple work with my ATS?', a: 'Yes, we provide webhooks and API integrations.' }
+              ].map((faq, i) => (
+                <div key={i} className="border-b border-zinc-200 pb-4">
+                  <button className="flex items-center justify-between w-full text-left py-2 group">
+                    <span className="text-lg text-zinc-800 font-medium group-hover:text-emerald-600 transition-colors">{faq.q}</span>
+                    <span className="text-2xl font-light text-zinc-400 group-hover:text-emerald-600">+</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* FOOTER */}
+          <footer className="border-t border-zinc-200/80 py-10 px-6 text-center text-xs text-zinc-500">
+            <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+              <span>© 2026 Maple. Backed by Y Combinator.</span>
+              <button 
+                onClick={() => setViewMode('dashboard')}
+                className="text-xs font-bold text-zinc-950 hover:underline"
+              >
+                Launch Operations Console →
+              </button>
+            </div>
+          </footer>
+        </main>
+      )}
+
+      {/* ========================================================================= */}
+      {/* OPERATIONS DASHBOARD VIEW (Litmus Clean Theme)                            */}
+      {/* ========================================================================= */}
+      {viewMode === 'dashboard' && (
+        <div className="h-[calc(100vh-4rem)] w-screen overflow-hidden flex flex-col select-none bg-[#f8f9fa]">
+          
+          {/* Dashboard Workspace Layout */}
+          <div className="flex flex-1 overflow-hidden w-full relative z-10">
+            
+            {/* LEFT COLUMN: Node Selection & Directives (25% width) */}
+            <div className="w-1/4 border-r border-zinc-200/80 bg-white p-5 flex flex-col gap-5 overflow-y-auto h-full shrink-0">
+              <div className="flex flex-col gap-1">
+                <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-wider font-mono">Transmission Lines Directory</h2>
+                <p className="text-[10px] text-zinc-400">Select regional line loops to monitor grid telemetry</p>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                {lines.map((line) => {
+                  const isSelected = selectedLineId === line.id;
+                  const isSecured = deEnergizedLines[line.id];
+                  return (
+                    <div 
+                      key={line.id}
+                      onClick={() => setSelectedLineId(line.id)}
+                      className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer flex flex-col justify-between relative overflow-hidden group ${
+                        isSelected 
+                          ? 'bg-zinc-50 border-zinc-950 shadow-sm' 
+                          : 'bg-white border-zinc-200/80 hover:border-zinc-300 hover:bg-zinc-50/50'
+                      }`}
+                    >
+                      {isSelected && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-zinc-950" />
+                      )}
+
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="font-bold text-xs text-zinc-950">
+                          {line.name.split(' (')[0]}
+                        </span>
+                        <span className={`text-[9px] px-2 py-0.5 rounded font-bold border ${
+                          isSecured 
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                            : line.id === 1 && !isSecured 
+                            ? 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse'
+                            : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+                        }`}>
+                          {isSecured ? 'SECURED' : line.id === 1 ? 'ALERT' : 'NOMINAL'}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between text-[10px] text-zinc-500 font-mono mt-1">
+                        <span>GRID-NODE-00{line.id}</span>
+                        <span>{line.voltage_kv}kV</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Carbon-Aware Workload Router */}
+              <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-4 flex flex-col gap-3">
+                <h3 className="text-xs font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-2 font-mono">
+                  <span>🖥️</span> Workload Router (Agent)
+                </h3>
+                {deEnergizedLines[selectedLineId] ? (
+                  <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 text-emerald-800 flex flex-col gap-1">
+                    <span className="text-[9px] uppercase tracking-widest font-extrabold font-mono">STATUS: REROUTED</span>
+                    <p className="text-[10px] leading-relaxed text-emerald-900">
+                      100% of compute workloads routed away from substation zone. Draw: 0.0MW.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-white p-3 rounded-xl border border-zinc-200/80 space-y-2">
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-zinc-500">Carbon Intensity:</span>
+                      <span className="font-mono text-zinc-950 font-semibold">
+                        {selectedLineId === 1 && '420 gCO2/kWh'}
+                        {selectedLineId === 2 && '210 gCO2/kWh'}
+                        {selectedLineId === 3 && '280 gCO2/kWh'}
+                        {selectedLineId === 4 && '540 gCO2/kWh'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-zinc-500">Target Node:</span>
+                      <span className="font-mono text-zinc-700 text-[10px]">
+                        {selectedLineId === 1 && 'Monterey-A'}
+                        {selectedLineId === 2 && 'Sonoma-Host'}
+                        {selectedLineId === 3 && 'Napa-Venture'}
+                        {selectedLineId === 4 && 'SF-Downtown-Cloud'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Directives */}
+              <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-4 flex flex-col gap-3">
+                <h3 className="text-xs font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-2 font-mono">
+                  <span>⚡</span> Safety Directives
+                </h3>
+                {deEnergizedLines[selectedLineId] ? (
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                    <span className="text-emerald-700 text-xs font-bold mt-0.5">✓</span>
+                    <div>
+                      <h4 className="text-xs font-bold text-emerald-900">SCADA Isolation Verified</h4>
+                      <p className="text-[10px] text-emerald-800 mt-0.5 leading-relaxed">Line voltage 0.0kV. Spark ignition risk eliminated.</p>
+                    </div>
+                  </div>
+                ) : currentScore > 60 ? (
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-50 border border-rose-200">
+                      <span className="text-rose-700 font-bold text-xs mt-0.5">1</span>
+                      <div>
+                        <h4 className="text-xs font-bold text-rose-900">Open Line Breakers</h4>
+                        <p className="text-[10px] text-rose-800 mt-0.5">High wind coupled with dry fuel poses immediate threat.</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-white border border-zinc-200/80">
+                    <span className="text-zinc-400 text-xs mt-0.5">✓</span>
+                    <div>
+                      <h4 className="text-xs font-bold text-zinc-800">Continuous Monitoring</h4>
+                      <p className="text-[10px] text-zinc-500 mt-0.5">Low risk index. Scan interval running at 45s.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CENTER COLUMN: SVG Vector Map (65%) & Dark Developer Console (35%) */}
+            <div className="w-1/2 flex flex-col border-r border-zinc-200/80 h-full shrink-0">
+              
+              {/* SVG Map Container */}
+              <div className="h-[65%] flex items-center justify-center p-4 bg-[#f8f9fa] relative overflow-hidden">
+                <div className="absolute inset-0 opacity-[0.08] pointer-events-none" style={{
+                  backgroundImage: `radial-gradient(circle, #000 1px, transparent 1px)`,
+                  backgroundSize: '24px 24px'
+                }} />
+
+                <div className="absolute top-4 left-6 z-10 flex flex-col gap-1 pointer-events-none">
+                  <span className="text-zinc-400 uppercase tracking-widest text-[9px] font-mono font-bold">GRID TOPOLOGY VIEWPORT</span>
+                  <span className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5">
+                    <span className={`h-1.5 w-1.5 rounded-full ${deEnergizedLines[selectedLineId] ? 'bg-emerald-600' : 'bg-indigo-600'}`} />
+                    California Coastal Transmission Spans
+                  </span>
+                </div>
+
+                <div className="absolute top-4 right-6 z-10 pointer-events-none text-right flex flex-col gap-1">
+                  <span className="text-zinc-400 uppercase tracking-widest text-[9px] font-mono font-bold">NODE STATUS</span>
+                  <span className={`text-xs font-bold ${
+                    deEnergizedLines[selectedLineId] 
+                      ? 'text-emerald-700' 
+                      : currentScore > 60 
+                      ? 'text-rose-700' 
+                      : 'text-amber-700'
+                  }`}>
+                    {deEnergizedLines[selectedLineId] ? 'DE-ENERGIZED' : currentScore > 60 ? 'CRITICAL RISK' : 'NOMINAL'}
+                  </span>
+                </div>
+
+                <svg viewBox="0 0 300 360" className="w-full h-full max-h-[92%] transition-all select-none">
+                  {/* Grid Segment Lines */}
+                  <line x1="100" y1="80" x2="200" y2="100" stroke={deEnergizedLines[2] ? '#10b981' : '#a1a1aa'} strokeWidth={selectedLineId === 2 ? '2.5' : '1.5'} strokeDasharray={deEnergizedLines[2] ? "4 4" : "3 3"} />
+                  <line x1="200" y1="100" x2="150" y2="180" stroke={deEnergizedLines[3] ? '#10b981' : '#a1a1aa'} strokeWidth={selectedLineId === 3 ? '2.5' : '1.5'} strokeDasharray={deEnergizedLines[3] ? "4 4" : "3 3"} />
+                  <line x1="150" y1="180" x2="120" y2="280" stroke={deEnergizedLines[1] ? '#10b981' : selectedLineId === 1 && currentScore > 60 ? '#f43f5e' : '#4f46e5'} strokeWidth={selectedLineId === 1 ? '3' : '1.5'} strokeDasharray={deEnergizedLines[1] ? "4 4" : "none"} />
+                  <line x1="100" y1="80" x2="150" y2="180" stroke={deEnergizedLines[4] ? '#10b981' : '#a1a1aa'} strokeWidth={selectedLineId === 4 ? '2.5' : '1.5'} strokeDasharray={deEnergizedLines[4] ? "4 4" : "3 3"} />
+
+                  {/* Voltage Labels */}
+                  <text x="215" y="90" fill="#71717a" fontSize="7" fontFamily="monospace">115kV</text>
+                  <text x="180" y="150" fill="#71717a" fontSize="7" fontFamily="monospace">230kV</text>
+                  <text x="142" y="240" fill={selectedLineId === 1 ? '#e11d48' : '#4f46e5'} fontSize="8" fontFamily="monospace" fontWeight="bold">500kV</text>
+
+                  {/* Nodes */}
+                  <g className="cursor-pointer" onClick={() => setSelectedLineId(1)}>
+                    {selectedLineId === 1 && !deEnergizedLines[1] && (
+                      <circle cx="120" cy="280" r="15" fill="#f43f5e" opacity="0.2">
+                        <animate attributeName="r" values="8;18;8" dur="1.8s" repeatCount="indefinite" />
+                      </circle>
+                    )}
+                    <circle cx="120" cy="280" r={selectedLineId === 1 ? 8 : 5} fill={deEnergizedLines[1] ? '#10b981' : selectedLineId === 1 && currentScore > 60 ? '#f43f5e' : '#18181b'} stroke="#fff" strokeWidth={selectedLineId === 1 ? '2' : '1'} />
+                    <text x="120" y="266" fill={deEnergizedLines[1] ? '#059669' : selectedLineId === 1 ? '#e11d48' : '#3f3f46'} fontSize="8" fontWeight="bold" textAnchor="middle">Big Sur (500kV)</text>
+                  </g>
+
+                  <g className="cursor-pointer" onClick={() => setSelectedLineId(2)}>
+                    <circle cx="100" cy="80" r={selectedLineId === 2 ? 8 : 5} fill={deEnergizedLines[2] ? '#10b981' : '#18181b'} stroke="#fff" strokeWidth={selectedLineId === 2 ? '2' : '1'} />
+                    <text x="100" y="68" fill={selectedLineId === 2 ? '#d97706' : '#3f3f46'} fontSize="8" fontWeight="bold" textAnchor="middle">Santa Rosa (115kV)</text>
+                  </g>
+
+                  <g className="cursor-pointer" onClick={() => setSelectedLineId(3)}>
+                    <circle cx="200" cy="100" r={selectedLineId === 3 ? 8 : 5} fill={deEnergizedLines[3] ? '#10b981' : '#18181b'} stroke="#fff" strokeWidth={selectedLineId === 3 ? '2' : '1'} />
+                    <text x="200" y="88" fill={selectedLineId === 3 ? '#d97706' : '#3f3f46'} fontSize="8" fontWeight="bold" textAnchor="middle">Calistoga (230kV)</text>
+                  </g>
+
+                  <g className="cursor-pointer" onClick={() => setSelectedLineId(4)}>
+                    <circle cx="150" cy="180" r={selectedLineId === 4 ? 8 : 5} fill={deEnergizedLines[4] ? '#10b981' : '#18181b'} stroke="#fff" strokeWidth={selectedLineId === 4 ? '2' : '1'} />
+                    <text x="150" y="168" fill={selectedLineId === 4 ? '#4f46e5' : '#3f3f46'} fontSize="8" fontWeight="bold" textAnchor="middle">S.F. Downtown (12kV)</text>
+                  </g>
+                </svg>
+              </div>
+
+              {/* Developer SCADA Log Console (35%) */}
+              <div className="h-[35%] border-t border-zinc-200/80 bg-[#121215] text-zinc-100 p-4 font-mono text-[10px] flex flex-col shrink-0">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-2 select-none">
+                  <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+                    SCADA Log Stream
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {(['all', 'alert', 'telemetry', 'scada'] as const).map((cat) => (
+                      <button 
+                        key={cat} 
+                        onClick={() => setLogFilter(cat)}
+                        className={`px-2 py-0.5 rounded text-[9px] uppercase font-semibold transition-all ${
+                          logFilter === cat ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex-grow overflow-y-auto space-y-1.5 pr-2">
+                  {filteredLogs.map((log) => (
+                    <div key={log.id} className={log.category === 'alert' ? 'text-rose-400 font-semibold' : log.category === 'telemetry' ? 'text-indigo-300' : 'text-zinc-400'}>
+                      <span className="text-zinc-600">[{log.time}]</span> {log.text}
+                    </div>
+                  ))}
+                  <div ref={logsEndRef} />
+                </div>
+              </div>
+
+            </div>
+
+            {/* RIGHT COLUMN: Telemetry HUD (25% width) */}
+            <div className="w-1/4 bg-white p-5 flex flex-col gap-5 overflow-y-auto h-full shrink-0 border-l border-zinc-200/80">
+              
+              {/* Threat Dial */}
+              <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-5 flex flex-col items-center select-none">
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider w-full mb-3 font-mono">Wildfire Danger Index</h3>
+
+                <div className="relative flex items-center justify-center h-32 w-32 mb-3">
+                  <svg className="absolute h-full w-full transform -rotate-90">
+                    <circle className="text-zinc-200" strokeWidth="8" stroke="currentColor" fill="transparent" r="56" cx="64" cy="64" />
+                    <circle 
+                      className={`transition-all duration-1000 ${deEnergizedLines[selectedLineId] ? 'text-emerald-500' : currentScore > 60 ? 'text-rose-600' : 'text-amber-500'}`}
+                      strokeWidth="8" 
+                      strokeDasharray="351" 
+                      strokeDashoffset={351 - (351 * currentScore) / 100}
+                      strokeLinecap="round" 
+                      stroke="currentColor" 
+                      fill="transparent" 
+                      r="56" 
+                      cx="64" 
+                      cy="64" 
+                    />
+                  </svg>
+                  <div className="flex flex-col items-center">
+                    <span className="text-2xl font-extrabold text-zinc-950">{currentScore.toFixed(1)}%</span>
+                    <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-mono mt-0.5">Threat Level</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 w-full">
+                  <div className="bg-white p-2 rounded-xl border border-zinc-200/80 text-center">
+                    <span className="text-[9px] text-zinc-500 block">P-Ignition</span>
+                    <span className="text-xs font-bold text-indigo-700">{currentProbability.toFixed(1)}%</span>
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-zinc-200/80 text-center">
+                    <span className="text-[9px] text-zinc-500 block">Consequence</span>
+                    <span className="text-xs font-bold text-indigo-700">{currentConsequence.toFixed(1)}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* SHAP Risk Factor Attribution */}
+              <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-4">
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3 font-mono">Risk Factors Attribution</h3>
+                {selectedLineData?.contributions && !deEnergizedLines[selectedLineId] ? (
+                  Object.entries(selectedLineData.contributions).map(([factor, percentage]) => (
+                    <div key={factor} className="mb-2.5">
+                      <div className="flex justify-between text-[10px] mb-1">
+                        <span className="text-zinc-700">{factor}</span>
+                        <span className="text-zinc-500 font-mono">{percentage}%</span>
+                      </div>
+                      <div className="w-full bg-zinc-200 rounded-full h-1">
+                        <div className="bg-indigo-600 h-1 rounded-full transition-all duration-700" style={{ width: `${percentage}%` }} />
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center text-[10px] text-zinc-400 py-3 italic">
+                    {deEnergizedLines[selectedLineId] ? 'Line isolated. Risk zeroed.' : 'Syncing factor attributions...'}
+                  </div>
+                )}
+              </div>
+
+              {/* Environmental Telemetry */}
+              <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-4 flex flex-col gap-3">
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider font-mono">Geospatial Telemetry Hub</h3>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white p-2.5 rounded-xl border border-zinc-200/80">
+                    <span className="text-[9px] text-zinc-500 block mb-0.5">Wind Speed</span>
+                    <span className="text-xs font-bold text-zinc-950">{selectedLineData?.wind_speed?.toFixed(1) || '--'} mph</span>
+                  </div>
+                  <div className="bg-white p-2.5 rounded-xl border border-zinc-200/80">
+                    <span className="text-[9px] text-zinc-500 block mb-0.5">Humidity</span>
+                    <span className="text-xs font-bold text-zinc-950">{selectedLineData?.humidity?.toFixed(1) || '--'}%</span>
+                  </div>
+                  <div className="bg-white p-2.5 rounded-xl border border-zinc-200/80">
+                    <span className="text-[9px] text-zinc-500 block mb-0.5">Soil Moisture</span>
+                    <span className="text-xs font-bold text-zinc-950">{selectedLineData?.soil_moisture?.toFixed(1) || '--'}%</span>
+                  </div>
+                  <div className="bg-white p-2.5 rounded-xl border border-zinc-200/80">
+                    <span className="text-[9px] text-zinc-500 block mb-0.5">Tree Canopy</span>
+                    <span className="text-xs font-bold text-zinc-950">{selectedLineData?.canopy_density?.toFixed(1) || '--'}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actuator Trigger */}
+              {!deEnergizedLines[selectedLineId] && currentScore > 60 && (
+                <div className="mt-auto pt-2">
+                  <button 
+                    onClick={triggerShutdown}
+                    disabled={isProcessingTrip}
+                    className="w-full py-3.5 px-4 rounded-full font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md transition-all duration-300 transform active:scale-95 text-xs tracking-wider uppercase flex items-center justify-center gap-2"
+                  >
+                    <span>⚠</span> TRIGGER BREAKER TRIP
+                  </button>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SCADA Modal Handshake */}
+      {showTripModal && (
+        <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-md flex flex-col items-center justify-center z-[100] transition-opacity duration-300">
+          <div className="bg-white border border-zinc-200 p-8 rounded-3xl max-w-sm w-full mx-4 text-center shadow-2xl relative">
+            <div className="h-14 w-14 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-5 text-xl font-bold animate-pulse border border-rose-200">⚡</div>
+            <h3 className="text-lg font-bold mb-2 text-zinc-950">Breaker Trip Directive</h3>
+            <p className="text-zinc-600 text-xs mb-6 leading-relaxed">Transmitting SCADA isolation signals to segment GRID-NODE-00{selectedLineId}.</p>
+            <div className="w-full bg-zinc-100 rounded-full h-1.5 mb-3 overflow-hidden">
+              <div className="bg-rose-600 h-1.5 rounded-full transition-all duration-200" style={{ width: `${tripProgress}%` }}></div>
+            </div>
+            <span className="text-[10px] text-zinc-500 tracking-wider uppercase font-mono block">
+              {tripStatusText}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+-e 
+========== platform.tsx ==========
+import React from 'react';
+import Head from 'next/head';
+import Link from 'next/link';
+
+export default function Platform() {
+  return (
+    <div className="bg-[#fbfbfd] text-zinc-950 min-h-screen font-sans antialiased selection:bg-zinc-900 selection:text-white">
+      <Head>
+        <title>Platform | Maple</title>
+      </Head>
+
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-zinc-200/80 h-16 transition-all duration-300">
+        <div className="max-w-7xl mx-auto h-full px-6 flex items-center justify-between">
+          <Link href="/">
+            <div className="flex items-center gap-3 cursor-pointer">
+              <div className="h-8 w-8 rounded-lg bg-zinc-950 flex items-center justify-center font-bold text-xs text-white shadow-sm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M4 14h6v6l10-12h-6V2z"/></svg>
+              </div>
+              <div className="flex flex-col">
+                <span className="font-extrabold text-lg tracking-tight text-zinc-950 flex items-center gap-2">
+                  Maple
+                </span>
+              </div>
+            </div>
+          </Link>
+
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-zinc-600">
+            <Link href="/product"><span className="cursor-pointer hover:text-zinc-950 transition-colors">Product</span></Link>
+            <Link href="/why-maple"><span className="cursor-pointer hover:text-zinc-950 transition-colors">Why Maple</span></Link>
+            <Link href="/platform"><span className="cursor-pointer text-zinc-950 transition-colors font-semibold">Platform</span></Link>
+          </nav>
+
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <button className="px-5 py-2 rounded-full text-sm font-semibold bg-zinc-950 text-white hover:bg-zinc-800 transition-all shadow-sm active:scale-95 hidden sm:inline-flex items-center gap-1.5">
+                <span>Login</span>
+              </button>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-3xl mx-auto px-6 py-20">
+        <h1 className="text-4xl font-extrabold mb-4 font-serif">Platform Specifications</h1>
+        <p className="text-xs font-mono text-zinc-500 mb-12 uppercase tracking-widest">LAST UPDATED MAY 13, 2026</p>
+
+        <div className="prose prose-zinc max-w-none prose-h2:font-serif prose-h2:text-2xl prose-h2:font-bold prose-h2:mt-12 prose-h2:mb-4 prose-p:text-sm prose-p:leading-relaxed prose-p:text-zinc-700">
+          <p>
+            Please read these Platform Specifications carefully before integrating the telemetry services offered by Maple, Inc. ("we," "us," or "our"). By executing API connection requests referencing these Specifications, or by accessing or using the Maple SCADA operations console and any related physical earth services (the "Services"), you agree to be bound by this complete technical agreement, which supersedes all other operational terms.
+          </p>
+
+          <h2>1. API Connections; Access to the Telemetry</h2>
+          <p>
+            Upon mutual execution of secure API keys, we grant you a limited license to access and use the SCADA Operations Services.
+          </p>
+          <p>
+            Upon mutual execution of connection strings, Maple grants you a nonexclusive, limited, personal license to access and use the specified physical earth Services during the Term for your internal grid management purposes, in compliance with the official DNP3 documentation.
+          </p>
+          <p className="font-semibold text-zinc-900 mt-4 mb-2">Node Capacity Eligibility</p>
+          <p>
+            The Base Node Plan is restricted to grid operators with 100 or fewer total sub-transmission segments across affiliated entities. Organizations exceeding this threshold must upgrade to Enterprise Node plans. You must maintain line topology eligibility and notify Maple of any changes. Maple reserves the right to suspend API access that does not meet geographic requirements without liability.
+          </p>
+
+          <h2>2. Account Types</h2>
+          <p>
+            Maple permits both individual grid analysts and multi-region utility entities to create accounts for SCADA Service access.
+          </p>
+
+          <h2>3. Implementation</h2>
+          <p>
+            Upon fee payment, Maple provides standard physical earth integration assistance as specified in the service agreements. Additional geospatial mapping services beyond agreed-upon hours are billable at current consultation rates.
+          </p>
+
+          <h2>4. Support; Service Levels</h2>
+          <p>
+            Maple provides 24/7 grid monitoring support, database maintenance, and 99.99% uptime according to its standard Support and Availability Policy.
+          </p>
+
+          <h2>5. Telemetry Updates</h2>
+          <p>
+            Maple may provide real-time HRRR weather Updates without additional charge, which become part of the Services. Updates to physical earth layers are not obligatory. You understand that Maple retains discretion to modify the risk algorithms, with commercially reasonable notice for major changes in calculation weights.
+          </p>
+
+          <h2>6. Ownership; Feedback</h2>
+          <p>
+            Maple retains all right, title, and interest in the Operations Console and related intellectual property. You may provide Feedback regarding risk accuracy, granting Maple a nonexclusive, worldwide, perpetual, irrevocable, transferable, sublicensable, royalty-free license to exploit such Feedback for any purpose. This provision does not impair Maple's right to develop competing risk models.
+          </p>
+
+          <h2>7. Fees; Payment</h2>
+          <p>
+            You pay API call Fees as specified in Order Forms, typically invoiced annually in advance and payable within 30 days in U.S. dollars. Past due invoices accrue interest at 1.5% monthly or the maximum legal rate. You bear all taxes except those on Maple's net income. All Fees are non-refundable and non-offsettable. Overage fees apply for excess grid node polling or usage at the rates specified or Maple's standard rates.
+          </p>
+
+          <h2>8. Restrictions</h2>
+          <p>
+            You may not reverse engineer, copy, resell, or otherwise misuse the Services.
+          </p>
+          <p>
+            You may not reverse engineer, decompile, modify, copy, rent, lease, distribute, or transfer rights to the risk models. Prohibited activities include creating competitive geospatial applications, interfering with SCADA operation, or bypassing node access restrictions. You must comply with all applicable utility compliance laws and respect third-party intellectual property rights.
+          </p>
+
+          <h2>9. Data Provenance & Compliance</h2>
+          <p>
+            Maple respects data provenance rights and responds expeditiously to valid accuracy claims.
+          </p>
+          <p>
+            Required telemetry notification information. A valid notice must include:
+            <br />• Cryptographic signature of an authorized utility representative
+            <br />• Identification of the grid segment allegedly miscalculated
+            <br />• Identification of the physical earth data and its coordinate location
+            <br />• The complaining party's contact information
+            <br />• A statement of good faith belief that the telemetry is inaccurate
+          </p>
+
+          <h2>10. Confidential Infrastructure Information</h2>
+          <p>
+            Both parties must protect each other's nonpublic physical infrastructure information.
+          </p>
+          <p>
+            Either party may disclose nonpublic SCADA layouts, products, intellectual property, and trade secrets ("Confidential Information"). Confidential Information excludes publicly available topography, information known without restriction, information rightfully obtained from third parties, or independently developed information.
+          </p>
+
+          <h2>11. Utility Data</h2>
+          <p>
+            You retain ownership of your grid topology data; you are responsible for its accuracy and legality.
+          </p>
+          <p>
+            "Utility Data" encompasses node coordinates, line voltages, or material provided to the Service. You retain all rights and intellectual property in Utility Data and bear sole responsibility for its accuracy, quality, integrity, legality, and appropriateness.
+          </p>
+
+          <h2>12. Use of Telemetry with Artificial Intelligence Models</h2>
+          <p>
+            We do not use your private grid topology to train generalized AI models.
+          </p>
+          <p>
+            Maple will not use Utility Data to train, fine-tune, improve, or develop generalized LLMs, generative AI models, machine learning models, or artificial intelligence systems. Maple warrants that third-party AI providers are prohibited from using, storing, or retaining Utility Data for model development, and that all Utility Data processed through AI/LLM services is processed transiently for Service provision only.
+          </p>
+
+          <h2>13. Vendor Integrations (Mireye & Open-Meteo)</h2>
+          <p>
+            The Services integrate with third-party platforms via APIs ("Vendor Integrations") including Mireye Physical Earth API and Open-Meteo. Service availability may depend on Vendor Integration access. You indemnify Maple for claims arising from Vendor Integration outages and are solely responsible for compliance with applicable terms.
+          </p>
+        </div>
+      </main>
+
+      <footer className="border-t border-zinc-200/80 py-10 px-6 text-center text-xs text-zinc-500">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <span>© 2026 Maple. Backed by Y Combinator.</span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+-e 
+========== product.tsx ==========
+import React from 'react';
+import Head from 'next/head';
+import Link from 'next/link';
+
+export default function Product() {
+  return (
+    <div className="bg-[#fbfbfd] text-zinc-950 min-h-screen font-sans antialiased selection:bg-zinc-900 selection:text-white">
+      <Head>
+        <title>Product | Maple</title>
+      </Head>
+
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-zinc-200/80 h-16 transition-all duration-300">
+        <div className="max-w-7xl mx-auto h-full px-6 flex items-center justify-between">
+          <Link href="/">
+            <div className="flex items-center gap-3 cursor-pointer">
+              <div className="h-8 w-8 rounded-lg bg-zinc-950 flex items-center justify-center font-bold text-xs text-white shadow-sm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M4 14h6v6l10-12h-6V2z"/></svg>
+              </div>
+              <div className="flex flex-col">
+                <span className="font-extrabold text-lg tracking-tight text-zinc-950 flex items-center gap-2">
+                  Maple
+                </span>
+              </div>
+            </div>
+          </Link>
+
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-zinc-600">
+            <Link href="/product"><span className="cursor-pointer text-zinc-950 transition-colors font-semibold">Product</span></Link>
+            <Link href="/why-maple"><span className="cursor-pointer hover:text-zinc-950 transition-colors">Why Maple</span></Link>
+            <Link href="/platform"><span className="cursor-pointer hover:text-zinc-950 transition-colors">Platform</span></Link>
+          </nav>
+
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <button className="px-5 py-2 rounded-full text-sm font-semibold bg-zinc-950 text-white hover:bg-zinc-800 transition-all shadow-sm active:scale-95 hidden sm:inline-flex items-center gap-1.5">
+                <span>Login</span>
+              </button>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-6 py-20">
+        <div className="text-center mb-16">
+          <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-zinc-950 mb-6">
+            Surgical Grid Isolation. <br/>
+            <span className="font-serif italic font-normal text-emerald-600">Powered by Physical AI.</span>
+          </h1>
+          <p className="text-lg text-zinc-600 max-w-2xl mx-auto">
+            Maple is a predictive operations agent for high-voltage transmission networks. We turn physical earth data into actionable SCADA directives.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-white border border-zinc-200 rounded-3xl p-8 shadow-sm">
+            <div className="h-12 w-12 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-xl mb-6">🌍</div>
+            <h3 className="text-xl font-bold text-zinc-950 mb-3">Mireye Telemetry Engine</h3>
+            <p className="text-sm text-zinc-600 leading-relaxed">
+              Maple continuously ingests physical earth metrics from Mireye, including granular soil hydrology (moisture content), USFS tree canopy fuel density, and topological slope angles across your entire grid footprint.
+            </p>
+          </div>
+
+          <div className="bg-white border border-zinc-200 rounded-3xl p-8 shadow-sm">
+            <div className="h-12 w-12 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-xl mb-6">⚡</div>
+            <h3 className="text-xl font-bold text-zinc-950 mb-3">SCADA Actuation</h3>
+            <p className="text-sm text-zinc-600 leading-relaxed">
+              When the AI detects a high-risk span—dry fuel combined with high wind speed vectors—it instantly formulates and executes precise DNP3 de-energization directives to open breakers at the exact node, isolating the threat.
+            </p>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+-e 
+========== why-maple.tsx ==========
+import React from 'react';
+import Head from 'next/head';
+import Link from 'next/link';
+
+export default function WhyMaple() {
+  return (
+    <div className="bg-[#fbfbfd] text-zinc-950 min-h-screen font-sans antialiased selection:bg-zinc-900 selection:text-white">
+      <Head>
+        <title>Why Maple</title>
+      </Head>
+
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-zinc-200/80 h-16 transition-all duration-300">
+        <div className="max-w-7xl mx-auto h-full px-6 flex items-center justify-between">
+          <Link href="/">
+            <div className="flex items-center gap-3 cursor-pointer">
+              <div className="h-8 w-8 rounded-lg bg-zinc-950 flex items-center justify-center font-bold text-xs text-white shadow-sm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M4 14h6v6l10-12h-6V2z"/></svg>
+              </div>
+              <div className="flex flex-col">
+                <span className="font-extrabold text-lg tracking-tight text-zinc-950 flex items-center gap-2">
+                  Maple
+                </span>
+              </div>
+            </div>
+          </Link>
+
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-zinc-600">
+            <Link href="/product"><span className="cursor-pointer hover:text-zinc-950 transition-colors">Product</span></Link>
+            <Link href="/why-maple"><span className="cursor-pointer text-zinc-950 transition-colors font-semibold">Why Maple</span></Link>
+            <Link href="/platform"><span className="cursor-pointer hover:text-zinc-950 transition-colors">Platform</span></Link>
+          </nav>
+
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <button className="px-5 py-2 rounded-full text-sm font-semibold bg-zinc-950 text-white hover:bg-zinc-800 transition-all shadow-sm active:scale-95 hidden sm:inline-flex items-center gap-1.5">
+                <span>Login</span>
+              </button>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-6 py-20">
+        <div className="text-center mb-16">
+          <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-zinc-950 mb-6">
+            Why Teams Switch to <br/>
+            <span className="font-serif italic font-normal text-amber-600">Maple.</span>
+          </h1>
+          <p className="text-lg text-zinc-600 max-w-2xl mx-auto">
+            The status quo for wildfire mitigation involves blindly shutting down power for millions of customers. Maple offers a deterministic, hyper-local alternative.
+          </p>
+        </div>
+
+        <div className="bg-[#121215] text-white rounded-[2rem] p-10 sm:p-16 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-8 opacity-10 font-serif text-9xl">"</div>
+          <h3 className="text-3xl font-bold mb-8">The Liability Engine</h3>
+          <p className="text-zinc-300 text-lg leading-relaxed mb-10 max-w-2xl">
+            In recent years, untracked high-voltage sparks have triggered catastrophic wildfires, driving multi-billion dollar utility conglomerates into bankruptcy and causing immeasurable ecological damage. By deploying Maple, grid operators protect both the environment and their balance sheets.
+          </p>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-8 border-t border-zinc-800">
+            <div>
+              <div className="text-3xl font-extrabold text-emerald-400 mb-2">100ft</div>
+              <div className="text-xs text-zinc-400 uppercase tracking-wider font-mono">Precision Scaling</div>
+            </div>
+            <div>
+              <div className="text-3xl font-extrabold text-white mb-2">$30B+</div>
+              <div className="text-xs text-zinc-400 uppercase tracking-wider font-mono">Liability Mitigated</div>
+            </div>
+            <div>
+              <div className="text-3xl font-extrabold text-amber-400 mb-2">99%</div>
+              <div className="text-xs text-zinc-400 uppercase tracking-wider font-mono">Fewer Blackouts</div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+-e 
+========== DONE ==========

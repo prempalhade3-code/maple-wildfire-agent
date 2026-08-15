@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgis/postgis:15-3.4-alpine
+    platform: linux/amd64
+    container_name: grid_sentry_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: gridpwd
+      POSTGRES_DB: grid_sentry
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./backend
+    container_name: grid_sentry_api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:gridpwd@db:5432/grid_sentry
+      # Add MIREYE_API_TOKEN to a local .env file. It is never committed to Git.
+      MIREYE_API_TOKEN: ${MIREYE_API_TOKEN:-}
+    ports:
+      - "8000:8000"
+    command: "uvicorn main:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  db_data:
