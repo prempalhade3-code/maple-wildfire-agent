@@ -1,79 +1,190 @@
-# Maple: Autonomous Wildfire Grid-Safety Agent
+# Maple
 
-Maple is an agentic wildfire grid-safety platform designed to prevent power line-ignited forest fires. By integrating real-time weather analytics from Open-Meteo with physical-world intelligence from Mireye, it identifies wildfire risks at a granular, span-level prototype, enabling targeted protective recommendations instead of county-wide power shutoffs.
+> An autonomous wildfire grid-safety prototype. Maple watches the conditions around a monitored transmission span, explains its decision, and records a **simulated** protective response when risk crosses a threshold.
 
----
+**[Open the live console](https://maple-wildfire-agent.vercel.app)** · **[API](https://maple-backend-pf5l.onrender.com)**
 
-## 📋 The One-Pager Pitch
+## what is inside
 
-### 1. What problem are we solving?
-High-voltage transmission lines clashing with tree branches during wind storms are the leading cause of catastrophic wildfires (e.g., California's Camp Fire). Today, utility operators execute massive "Public Safety Power Shutoffs" (PSPS) across entire counties, leaving thousands of customers, businesses, and hospitals in the dark.
+- **A FastAPI safety agent** that evaluates seeded transmission spans on a 45-second loop.
+- **A physical-world evidence layer** powered by Mireye: soil moisture, vegetation canopy, terrain slope, nearby structures, and cited sources.
+- **Live weather ingestion** from Open-Meteo: wind speed, direction, humidity, and temperature.
+- **A transparent risk engine** that returns score contributors, evidence, citations, confidence, and a recommendation.
+- **A Next.js operations console** for inspecting spans, switching to a clearly labelled severe-weather demo, and viewing the decision trail.
+- **PostGIS-backed audit data** for lines, calculated risks, and simulated actuation records.
 
-**Maple solves this by tracking wildfire ignition risk at a granular, span-level prototype, allowing utilities to identify the line context that needs attention while keeping the rest of the grid powered.**
+## architecture
 
-### 2. What "weird" combination of datasets are we using?
-We combine **Mireye's physical-world intelligence** (soil conditions, vegetation canopy, terrain slope, and nearby structures) with **live weather telemetry** from Open-Meteo. Maple aligns the changing atmosphere with the physical context around an electric line, then produces an explainable protective recommendation.
+```text
+                         +------------------+
+                         |   Open-Meteo     |
+                         | live conditions  |
+                         +---------+--------+
+                                   |
++------------------+               v                 +-------------------+
+|      Mireye      | ------> FastAPI risk engine ----> | PostgreSQL/PostGIS |
+| cited place data |          + agent loop             | risks + audit log  |
++------------------+               |                 +-------------------+
+                                   v
+                         +------------------+
+                         |  Next.js console |
+                         | evidence → action|
+                         +------------------+
+```
 
-### 3. Who is the buyer?
-The buyers are **electric utilities** and their wildfire-mitigation, grid-operations, and risk-management teams. They need a better basis for targeted protective decisions than broad Public Safety Power Shutoffs.
+### request flow
 
----
+1. The frontend requests a selected span from the API.
+2. The risk engine fetches Open-Meteo conditions and a Mireye location scan concurrently.
+3. The engine calculates ignition probability and consequence, then derives a 0–100 risk score.
+4. The response contains evidence, data sources, timestamps, cited datasets, score contributors, confidence, and a recommendation.
+5. Scores above `70` can produce a **simulated** isolation record. No real grid equipment is contacted.
 
-## 🛠️ System Architecture
+The backend also evaluates seeded spans every 45 seconds. The browser does **not** poll continuously; it refreshes when a user selects a span or changes the scenario.
 
-Maple is built as a modular, containerized web application with a true **Autonomous Agent Loop**:
+## stack
 
-1. **Autonomous Safety Agent**: A background worker process inside the FastAPI app that scans monitored line locations every 45 seconds, analyzes physical and weather metrics, reasons about wildfire threat levels, and makes a simulated protective recommendation if the risk score crosses 70%.
-2. **Frontend**: Next.js (React + TypeScript) + Tailwind CSS dashboard with an animated field map, an evidence briefing, risk drivers, recommendation, and audit timeline.
-3. **Backend API**: FastAPI (Python) web server providing REST endpoints for checking risks and running a simulated protective action.
-4. **Database**: PostgreSQL with PostGIS extension (`postgis/postgis:15-3.4-alpine`) storing demonstration line paths, risk logs, and simulated actuation records.
+| Layer | Implementation |
+| --- | --- |
+| Console | Next.js 13, React 18, TypeScript, Tailwind CSS, Framer Motion |
+| API | FastAPI, Uvicorn, Pydantic, HTTPX |
+| Data | PostgreSQL 15 + PostGIS, SQLAlchemy async, GeoAlchemy2 |
+| Intelligence | Mireye `/v1/ask` + Open-Meteo forecast API |
+| Local runtime | Docker Compose |
+| Deployment | Vercel (console) + Render (API/Postgres) |
 
----
+## repository map
 
-## 🚀 Setup & Execution
+```text
+frontend/                 Next.js operator console
+  pages/                  Home, platform, and operations views
+  components/             Shared navigation and presentation components
+  styles/                 Global and page-level styles
+backend/                  FastAPI service
+  main.py                 API routes, startup, seed data, agent loop
+  risk_engine.py          Evidence normalization and risk calculation
+  mireye_client.py        Mireye client and clearly labelled fallback data
+  weather_client.py       Open-Meteo client
+  actuation.py            Simulated SCADA actuation + audit logging
+  models.py               PostGIS/SQLAlchemy models
+docker-compose.yml        Local API + PostGIS database
+```
 
-### Prerequisite: Ensure Docker Desktop is Running
-Make sure Docker Desktop is launched and the docker socket is responsive.
+## run locally
 
-### 1. Configure live Mireye access
-Copy the example environment file and add your Mireye API token. Do not commit `.env`.
+### prerequisites
+
+- Docker Desktop with Compose
+- Node.js 18+ and npm
+- A Mireye API token for live physical-world responses
+
+### 1. configure the backend
+
 ```bash
 cp .env.example .env
 ```
 
-Set `MIREYE_API_TOKEN` in `.env`, then start the Docker Compose stack from the project root:
-```bash
-docker compose up -d --build
-```
-The backend now creates its own PostGIS tables and seeds its four demo spans at startup.
+Set your token in `.env`:
 
-### 2. Launch the Frontend Dev Server
-Navigate to the frontend folder, install packages, and start Next.js:
+```env
+MIREYE_API_TOKEN=your_mireye_token
+```
+
+Start the API and PostGIS database:
+
+```bash
+docker compose up --build
+```
+
+On first boot, Maple creates the PostGIS extension/tables and seeds four demonstration transmission spans. The API is then available at `http://localhost:8000`.
+
+### 2. configure the console
+
 ```bash
 cd frontend
+cp .env.local.example .env.local
 npm install
 npm run dev
 ```
-The client dashboard will start up at **http://localhost:3000**.
 
-For a deployed or remote API, copy `frontend/.env.local.example` to
-`frontend/.env.local` and set `NEXT_PUBLIC_API_URL` to that API's URL.
+`frontend/.env.local` defaults to `http://localhost:8000`:
 
-### 3. Verify the services
-```bash
-curl http://localhost:8000/lines
-curl http://localhost:8000/risk/1
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-The Meet Maple page also has a clearly labelled **Run severe-weather demo** control. It uses simulated extreme conditions so the protective-action path can be demonstrated reliably; normal mode continues to use live weather.
+Open [http://localhost:3000](http://localhost:3000).
 
----
+### 3. verify it
 
-## ⚡ Interactive Dashboard & SCADA Simulation
+From the repository root:
 
-1. **Dashboard Overview**: Open **http://localhost:3000** in your browser.
-2. **Geospatial Scans**: Click on the **Big Sur Forest Span** node on the interactive SVG map. Notice the live Open-Meteo wind forecasts and Mireye soil moisture metrics loading. The warning badge flashes crimson to indicate a critical risk.
-3. **Emergency Isolation**: Click the **TRIGGER EMERGENCY SHUTDOWN** button:
-   - A modal progress window will initiate to display real-time SCADA breaker trip handshakes.
-   - HTML5 web audio alerts will emit warning sound tones directly in the browser.
-   - Once the handshake is complete, the map active node and transmission lines turn green (safe/de-energized), the threat dials drop to 0%, and de-energization confirmation logs are appended to the scrolling safety ticker.
+```bash
+curl http://localhost:8000/lines
+curl http://localhost:8000/lines/geojson
+curl http://localhost:8000/risk/1
+curl -X POST "http://localhost:8000/actuate/1?scenario=severe"
+```
+
+The last command creates a simulated protective-action audit record. It is deliberately gated behind a score of at least `70`.
+
+## API surface
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/lines` | List monitored spans |
+| `GET` | `/lines/geojson` | Return spans as a GeoJSON FeatureCollection |
+| `GET` | `/risk/{line_id}` | Calculate and return current evidence + risk decision |
+| `GET` | `/risk/{line_id}?scenario=severe` | Run the labelled severe-weather demo |
+| `POST` | `/actuate/{line_id}?scenario=severe` | Record a simulated isolation action when risk is high enough |
+| `POST` | `/seed` | Seed demo spans when the database is empty |
+
+### a note on data modes
+
+Normal mode uses live Open-Meteo weather and calls Mireye when `MIREYE_API_TOKEN` is set. If Mireye cannot be reached or no token is configured, the service returns clearly identified local demo fallback data so the product can still be explored. The operations console exposes the current data mode and retains source/timestamp information with each response.
+
+The severe-weather control is a labelled demonstration scenario. It uses deterministic severe conditions to make the protective-decision path reviewable regardless of the weather on demo day.
+
+## build and test
+
+```bash
+# console production build
+cd frontend
+npm run build
+
+# backend unit tests (with the Compose stack running)
+cd ..
+docker compose exec api pytest
+```
+
+## deploy
+
+### console · Vercel
+
+The Vercel project uses `frontend` as its root directory. Set this variable for both Preview and Production:
+
+```env
+NEXT_PUBLIC_API_URL=https://maple-backend-pf5l.onrender.com
+```
+
+Pushes to `main` trigger the connected Vercel deployment.
+
+### API · Render
+
+Deploy the `backend/` Docker service and configure:
+
+```env
+DATABASE_URL=postgresql+asyncpg://...
+MIREYE_API_TOKEN=...
+PORT=10000
+```
+
+The backend image honors Render's `PORT` variable and falls back to port `8000` for local Docker usage.
+
+## safety boundary
+
+Maple is a prototype and training/demo environment. Its SCADA workflow is simulated: it writes an audit record and never reaches real utility infrastructure. Do not use this application to control a live grid or as the sole basis for an operational safety decision.
+
+## small disclaimer
+
+The live answer can change with weather, source availability, and upstream API response time. That is why Maple displays evidence, timestamps, citations, and an explicit demo/fallback state instead of pretending every number is permanent.
